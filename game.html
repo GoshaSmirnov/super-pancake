@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Игра</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(to bottom, #ffecd2, #fcb69f);
+      transition: background 1s ease;
+      margin: 0;
+      overflow: hidden;
+    }
+    /* Основное меню */
+    .menu {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    .button {
+      position: relative;
+      width: 200px;
+      height: 50px;
+      margin: 10px;
+      background-color: #3498db;
+      color: white;
+      font-size: 18px;
+      border: none;
+      border-radius: 5px;
+      overflow: hidden;
+      transition: background-color 0.3s ease;
+    }
+    .button::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(to bottom right, transparent, rgba(255,255,255,0.5), transparent);
+      animation: glare 5s infinite;
+    }
+    @keyframes glare {
+      0% { transform: translate(-100%, -100%); }
+      100% { transform: translate(100%, 100%); }
+    }
+    .button:hover {
+      background-color: #5dade2;
+    }
+    /* Анимация появления/скрытия меню */
+    .menu-hidden .button { animation: hideButton 1s forwards; }
+    @keyframes hideButton {
+      0% { transform: translateX(0); opacity: 1; }
+      100% { transform: translateX(-100vw); opacity: 0; }
+    }
+    .menu-shown .button { animation: showButton 1s forwards; }
+    @keyframes showButton {
+      0% { transform: translateX(100vw); opacity: 0; }
+      100% { transform: translateX(0); opacity: 1; }
+    }
+    .game-background, .level-selected {
+      background: linear-gradient(to bottom, #a8e063, #56ab2f);
+    }
+    /* Модальное окно создания персонажа */
+    .modal-custom {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border-radius: 5px;
+      padding: 20px;
+      z-index: 1000;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 999;
+    }
+    /* Модальное окно персонажа с плавным исчезанием */
+    .character-window, .info-window {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border-radius: 5px;
+      padding: 20px;
+      z-index: 1100;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      opacity: 1;
+      transition: opacity 0.5s ease;
+    }
+    .character-window.closing, .info-window.closing {
+      opacity: 0;
+    }
+    .close-btn {
+      position: absolute;
+      top: 5px;
+      right: 10px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    /* Персонаж */
+    .character-preview, .character {
+      position: relative;
+      width: 100px;
+      height: 150px;
+      margin: 20px auto;
+    }
+    .character {
+      position: absolute;
+      transition: all 0.1s linear;
+    }
+    .head {
+      position: absolute;
+      top: 0; left: 25px;
+      width: 50px; height: 50px;
+      border-radius: 50%;
+    }
+    .body {
+      position: absolute;
+      top: 40px; left: 10px;
+      width: 80px; height: 80px;
+    }
+    .weapon {
+      position: absolute;
+      top: 20px; left: 80px;
+      width: 0; height: 0;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-bottom: 40px solid;
+    }
+    .name {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 16px;
+      white-space: nowrap;
+    }
+    /* Редактор карты */
+    .map-editor {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #f0f0f0;
+      overflow: hidden;
+    }
+    .level-select {
+      display: grid;
+      grid-template-columns: repeat(3, 100px);
+      gap: 10px;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .map-square {
+      width: 100px; height: 100px;
+      background-color: #ccc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .map-square.selected {
+      background-color: #3498db;
+      color: white;
+    }
+    /* Боковая панель редактора – всегда у правого края */
+    .map-editor-sidebar {
+      position: absolute;
+      right: 0; top: 0;
+      width: 200px;
+      height: 100vh;
+      background-color: #333;
+      color: white;
+      transition: right 0.3s ease;
+      z-index: 1100;
+      padding: 10px;
+    }
+    .entity {
+      margin: 10px 0;
+      cursor: pointer;
+    }
+    /* Сущности: стандартный враг, дом и новые объекты */
+    .entity.enemy {
+      width: 30px; height: 30px;
+      background-color: red;
+    }
+    .entity.house {
+      position: relative;
+      width: 40px; height: 40px;
+      background-color: #d2b48c;
+    }
+    .entity.house .window {
+      position: absolute;
+      top: 5px; left: 5px;
+      width: 10px; height: 10px;
+      background-color: yellow;
+    }
+    .entity.house .door {
+      position: absolute;
+      bottom: 0; left: 20px;
+      width: 10px; height: 20px;
+      background-color: #8b4513;
+    }
+    .entity.house .roof {
+      position: absolute;
+      top: -15px; left: 0;
+      width: 0; height: 0;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-bottom: 15px solid #8b4513;
+    }
+    /* Новые сущности */
+    /* Камень – треугольник; варианты регулируются через data-атрибут и inline transform */
+    .entity.stone {
+      width: 0; height: 0;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-bottom: 30px solid grey;
+    }
+    /* Дерево – ствол и ветви */
+    .entity.tree {
+      position: relative;
+      width: 20px; height: 50px;
+    }
+    .entity.tree .trunk {
+      width: 20px; height: 50px;
+      background-color: #8b4513;
+    }
+    .entity.tree .leaves {
+      position: absolute;
+      top: -20px; left: -15px;
+      width: 50px; height: 0;
+      border-left: 25px solid transparent;
+      border-right: 25px solid transparent;
+      border-bottom: 30px solid green;
+    }
+    /* Костёр – логи и пламя (несколько треугольников) */
+    .entity.campfire {
+      position: relative;
+      width: 40px; height: 40px;
+    }
+    .entity.campfire .log {
+      position: absolute;
+      width: 40px; height: 8px;
+      background-color: #8b4513;
+      top: 16px;
+      transform: rotate(45deg);
+    }
+    .entity.campfire .log2 {
+      position: absolute;
+      width: 40px; height: 8px;
+      background-color: #8b4513;
+      top: 16px;
+      transform: rotate(-45deg);
+    }
+    .entity.campfire .flame {
+      position: absolute;
+      top: 0; left: 10px;
+      width: 0; height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-bottom: 20px solid orange;
+    }
+    /* Пещера – составная фигура */
+    .entity.cave {
+      position: relative;
+      width: 60px; height: 40px;
+    }
+    .entity.cave .entrance {
+      position: absolute;
+      width: 60px; height: 40px;
+      background-color: black;
+      border-radius: 50%;
+      opacity: 0.7;
+    }
+    .entity.cave .walls {
+      position: absolute;
+      top: 40px; left: 0;
+      width: 60px; height: 20px;
+      background-color: #8b4513;
+    }
+    /* Отображение размещённых объектов и перетаскиваемой сущности */
+    .placed-entity, .dragging-entity {
+      position: absolute;
+      pointer-events: auto;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Главное меню -->
+    <div :class="{ 'menu': true, 'menu-hidden': !menuVisible, 'menu-shown': menuVisible && !gameStarted && !mapEditorVisible }" v-if="!mapEditorVisible">
+      <button class="button" @click="startGame">Играть</button>
+      <button class="button" @click="toggleCharacterWindow">Персонаж</button>
+      <button class="button">Достижения</button>
+      <button class="button">Выгрузить сохранение</button>
+      <button class="button">Загрузить сохранение</button>
+      <button class="button">Связаться с автором</button>
+      <button class="button">Справка</button>
+      <button class="button" @click="resetData">Сбросить данные</button>
+      <button class="button" @click="openMapEditor">Редактор карты</button>
+    </div>
+
+    <!-- Модальное окно создания персонажа -->
+    <div v-if="gameStarted && !characterCreated" class="modal-backdrop">
+      <div class="modal-custom">
+        <div class="d-flex justify-content-between">
+          <h5>Создание персонажа</h5>
+          <span class="close-btn" @click="cancelCharacterCreation">&times;</span>
+        </div>
+        <div class="mb-3">
+          <label for="characterName" class="form-label">Имя персонажа</label>
+          <input type="text" class="form-control" id="characterName" v-model="characterName">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Цвет кожи</label>
+          <input type="color" v-model="skinColor">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Цвет доспехов</label>
+          <input type="color" v-model="armorColor">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Цвет оружия</label>
+          <input type="color" v-model="weaponColor">
+        </div>
+        <div class="character-preview">
+          <div class="head" :style="{ backgroundColor: skinColor }"></div>
+          <div class="body" :style="{ backgroundColor: armorColor }"></div>
+          <div class="weapon" :style="{ borderBottomColor: weaponColor }"></div>
+        </div>
+        <div class="text-end">
+          <button type="button" class="btn btn-primary" @click="createCharacter">Создать</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Окно персонажа -->
+    <div v-if="characterWindowVisible" :class="['character-window', { closing: closingCharacterWindow }]" @keydown.esc="closeCharacterWindow" tabindex="0">
+      <span class="close-btn" @click="closeCharacterWindow">&times;</span>
+      <h5 class="mb-3">Информация о персонаже</h5>
+      <div class="character-preview" style="margin: 0 auto;">
+        <div class="head" :style="{ backgroundColor: skinColor }"></div>
+        <div class="body" :style="{ backgroundColor: armorColor }"></div>
+        <div class="weapon" :style="{ borderBottomColor: weaponColor }"></div>
+      </div>
+      <p><strong>Имя:</strong> {{ characterName }}</p>
+      <p><strong>Уровень:</strong> {{ characterStats.level }}</p>
+      <p><strong>Опыт:</strong> {{ characterStats.experience }}</p>
+      <p><strong>Здоровье:</strong> {{ characterStats.health }}</p>
+      <p><strong>Атака:</strong> {{ characterStats.attack }}</p>
+      <p><strong>Защита:</strong> {{ characterStats.defense }}</p>
+      <p><strong>Монеты:</strong> {{ characterStats.coins }}</p>
+    </div>
+
+    <!-- Окно информации об объекте (при клике на размещённый объект) -->
+    <div v-if="infoWindowVisible" :class="['info-window', { closing: closingInfoWindow }]" @keydown.esc="closeInfoWindow" tabindex="0">
+      <span class="close-btn" @click="closeInfoWindow">&times;</span>
+      <h5 class="mb-3">Информация об объекте</h5>
+      <p><strong>ID и имя:</strong> {{ currentObject.id }}</p>
+      <p><strong>Тип:</strong> {{ currentObject.typeText }}</p>
+    </div>
+
+    <!-- Игровой режим -->
+    <div v-if="gameStarted && !mapEditorVisible">
+      <!-- Персонаж на экране -->
+      <div v-if="characterCreated" class="character" :style="characterStyle">
+        <div class="head" :style="{ backgroundColor: skinColor }"></div>
+        <div class="body" :style="{ backgroundColor: armorColor }"></div>
+        <div class="weapon" :style="{ borderBottomColor: weaponColor }"></div>
+        <div class="name" :style="{ color: weaponColor }">{{ characterName }}</div>
+      </div>
+      <!-- Размещённые объекты из редактора карты (текущая локация) -->
+      <div v-for="(ent, index) in currentMapEntities" :key="ent.id" class="placed-entity"
+           :style="{ left: ent.x + 'px', top: ent.y + 'px', transform: 'scale(' + ent.scale + ')' }"
+           @click.left="showObjectInfo(ent)">
+        <component :is="getEntityComponent(ent)" :entity="ent"></component>
+      </div>
+    </div>
+
+    <!-- Редактор карты -->
+    <div v-if="mapEditorVisible" class="map-editor" @mousemove="handleMapMouseMove" @mousedown="handleMapMouseDown" @wheel.prevent="handleWheel" @contextmenu.prevent="cancelDragging">
+      <!-- Если квадрат (локация) ещё не выбран, показываем выбор -->
+      <div v-if="!levelSelected" class="level-select">
+        <div class="map-square" v-for="n in 9" :key="n"
+             :class="{ selected: n === selectedLevel }"
+             @click="selectLevel(n)">
+          {{ n === 5 ? '1' : n }}
+        </div>
+      </div>
+      <!-- Если квадрат выбран, задаём фон "травы" и загружаем объекты для данной локации -->
+      <div v-else class="level-selected" style="width: 100%; height: 100%; position: relative;">
+        <!-- Размещённые сущности на карте (для текущей локации) -->
+        <div v-for="ent in currentMapEntities" :key="ent.id" class="placed-entity"
+             :style="{ left: ent.x + 'px', top: ent.y + 'px', transform: 'scale(' + ent.scale + ')' }"
+             @click.left="showObjectInfo(ent)">
+          <component :is="getEntityComponent(ent)" :entity="ent"></component>
+        </div>
+        <!-- Перетаскиваемая сущность, если выбрана -->
+        <div v-if="draggingEntity" class="dragging-entity"
+             :style="{ left: draggingEntity.x + 'px', top: draggingEntity.y + 'px', transform: 'scale(' + draggingEntity.scale + ')' }">
+          <component :is="getEntityComponent(draggingEntity)" :entity="draggingEntity"></component>
+        </div>
+      </div>
+      <!-- Кнопка для выхода из редактора карты -->
+      <button style="position: absolute; top: 10px; left: 10px; z-index: 1200;" class="btn btn-secondary" @click="exitMapEditor">Сохранить и играть</button>
+      <!-- Боковая панель выбора сущностей -->
+      <div class="map-editor-sidebar">
+        <!-- Стандартные сущности -->
+        <div class="entity enemy" @click="selectEntity('enemy')">Враг</div>
+        <div class="entity house" @click="selectEntity('house')">
+          <div class="window"></div>
+          <div class="door"></div>
+          <div class="roof"></div>
+          Дом
+        </div>
+        <!-- Новые сущности -->
+        <div class="entity stone" @click="selectEntity('stone')">Камень</div>
+        <div class="entity tree" @click="selectEntity('tree')">Дерево</div>
+        <div class="entity campfire" @click="selectEntity('campfire')">Костёр</div>
+        <div class="entity cave" @click="selectEntity('cave')">Пещера</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Шаблоны для отображения сущностей -->
+  <script type="text/x-template" id="enemy-template">
+    <div class="entity enemy"></div>
+  </script>
+  <script type="text/x-template" id="house-template">
+    <div class="entity house">
+      <div class="window"></div>
+      <div class="door"></div>
+      <div class="roof"></div>
+    </div>
+  </script>
+  <script type="text/x-template" id="stone-template">
+    <div class="entity stone" :style="{ borderBottomColor: entity.color, transform: 'rotate(' + entity.angle + 'deg)' }"></div>
+  </script>
+  <script type="text/x-template" id="tree-template">
+    <div class="entity tree">
+      <div class="trunk" :style="{ backgroundColor: entity.trunkColor }"></div>
+      <div class="leaves" :style="{ borderBottomColor: entity.leavesColor }"></div>
+    </div>
+  </script>
+  <script type="text/x-template" id="campfire-template">
+    <div class="entity campfire">
+      <div class="log"></div>
+      <div class="log2"></div>
+      <div class="flame" :style="{ borderBottomColor: entity.flameColor }"></div>
+    </div>
+  </script>
+  <script type="text/x-template" id="cave-template">
+    <div class="entity cave">
+      <div class="entrance"></div>
+      <div class="walls"></div>
+    </div>
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.2.37/dist/vue.global.js"></script>
+  <script>
+    const entityComponents = {
+      enemy: { template: '#enemy-template' },
+      house: { template: '#house-template' },
+      stone: { template: '#stone-template', props: ['entity'] },
+      tree: { template: '#tree-template', props: ['entity'] },
+      campfire: { template: '#campfire-template', props: ['entity'] },
+      cave: { template: '#cave-template', props: ['entity'] }
+    };
+
+    const app = Vue.createApp({
+      data() {
+        return {
+          // Главное меню и игровой режим
+          menuVisible: true,
+          gameStarted: false,
+          characterCreated: false,
+          // Данные персонажа
+          characterName: '',
+          skinColor: '#ffdbac',
+          armorColor: '#cccccc',
+          weaponColor: '#ff0000',
+          characterPosition: { x: 0, y: 0 },
+          characterStats: {
+            level: 1,
+            experience: 0,
+            health: 100,
+            attack: 10,
+            defense: 5,
+            coins: 0
+          },
+          // Окна
+          characterWindowVisible: false,
+          closingCharacterWindow: false,
+          infoWindowVisible: false,
+          closingInfoWindow: false,
+          currentObject: {},
+          // Редактор карты
+          mapEditorVisible: false,
+          levelSelected: false,
+          selectedLevel: null,
+          // Все локации хранятся в объекте: ключ – номер локации, значение – массив объектов
+          mapLayout: {},
+          // Массив объектов для текущей локации (из mapLayout[selectedLevel])
+          currentMapEntities: [],
+          // Перетаскиваемая сущность
+          selectedEntity: null,
+          draggingEntity: null,
+          // Счётчик id для объектов
+          entityIdCounter: 1,
+          keysPressed: {}
+        };
+      },
+      computed: {
+        characterStyle() {
+          return {
+            left: this.characterPosition.x + 'px',
+            top: this.characterPosition.y + 'px'
+          };
+        }
+      },
+      methods: {
+        // Игровой режим
+        startGame() {
+          this.menuVisible = false;
+          this.gameStarted = true;
+          document.body.classList.add('game-background');
+          // В игровом режиме загружаем объекты из текущей локации (по умолчанию выбранная локация)
+          if(this.mapLayout[this.currentLevel]) {
+            this.currentMapEntities = this.mapLayout[this.currentLevel];
+          }
+        },
+        showMenu() {
+          this.gameStarted = false;
+          this.mapEditorVisible = false;
+          this.menuVisible = true;
+          document.body.classList.remove('game-background');
+          this.characterWindowVisible = false;
+        },
+        createCharacter() {
+          if (this.characterName.trim() !== '') {
+            this.characterCreated = true;
+            this.characterPosition = {
+              x: window.innerWidth / 2 - 50,
+              y: window.innerHeight / 2 - 75
+            };
+            this.saveCharacterData();
+          }
+        },
+        cancelCharacterCreation() {
+          this.gameStarted = false;
+          this.menuVisible = true;
+        },
+        updatePosition() {
+          const speed = 5;
+          let dx = 0, dy = 0;
+          if (this.keysPressed['w']) dy -= speed;
+          if (this.keysPressed['s']) dy += speed;
+          if (this.keysPressed['a']) dx -= speed;
+          if (this.keysPressed['d']) dx += speed;
+          const newX = this.characterPosition.x + dx;
+          const newY = this.characterPosition.y + dy;
+          // Проверка границ экрана и препятствий (деревья и камни – тип "препятствие")
+          let blocked = false;
+          for (const ent of this.currentMapEntities) {
+            if (['tree','stone'].includes(ent.type)) {
+              // Простейшая проверка столкновения (прямоугольная область)
+              if (newX < ent.x + 50 && newX + 100 > ent.x &&
+                  newY < ent.y + 50 && newY + 150 > ent.y) {
+                blocked = true;
+                break;
+              }
+            }
+          }
+          if (!blocked) {
+            if (newX >= 0 && newX + 100 <= window.innerWidth) { this.characterPosition.x = newX; }
+            if (newY >= 0 && newY + 150 <= window.innerHeight) { this.characterPosition.y = newY; }
+          }
+          // Проверка взаимодействия с врагами и пещерами
+          for (const ent of this.currentMapEntities) {
+            if (['enemy','cave'].includes(ent.type)) {
+              if (Math.abs(this.characterPosition.x - ent.x) < 50 && Math.abs(this.characterPosition.y - ent.y) < 50) {
+                if (ent.type === 'enemy') {
+                  alert("Начать бой?");
+                } else if (ent.type === 'cave') {
+                  alert("Перейти в другую локацию?");
+                }
+              }
+            }
+          }
+        },
+        toggleCharacterWindow() {
+          this.characterWindowVisible = !this.characterWindowVisible;
+          if (this.characterWindowVisible) {
+            this.$nextTick(() => { document.querySelector('.character-window').focus(); });
+          }
+        },
+        closeCharacterWindow() {
+          this.closingCharacterWindow = true;
+          setTimeout(() => { this.characterWindowVisible = false; this.closingCharacterWindow = false; }, 500);
+        },
+        saveCharacterData() {
+          localStorage.setItem('characterData', JSON.stringify({
+            name: this.characterName,
+            skinColor: this.skinColor,
+            armorColor: this.armorColor,
+            weaponColor: this.weaponColor,
+            stats: this.characterStats,
+            position: this.characterPosition
+          }));
+        },
+        loadCharacterData() {
+          const data = localStorage.getItem('characterData');
+          if (data) {
+            const parsed = JSON.parse(data);
+            this.characterName = parsed.name;
+            this.skinColor = parsed.skinColor;
+            this.armorColor = parsed.armorColor;
+            this.weaponColor = parsed.weaponColor;
+            this.characterStats = parsed.stats;
+            this.characterPosition = parsed.position;
+            this.characterCreated = true;
+          }
+        },
+        resetData() {
+          localStorage.removeItem('characterData');
+          this.characterCreated = false;
+          this.characterName = '';
+          this.skinColor = '#ffdbac';
+          this.armorColor = '#cccccc';
+          this.weaponColor = '#ff0000';
+          this.characterPosition = { x: 0, y: 0 };
+          this.characterStats = { level: 1, experience: 0, health: 100, attack: 10, defense: 5, coins: 0 };
+        },
+        // Режим редактора карты
+        openMapEditor() {
+          const code = prompt('Введите код:');
+          if (code === '5555') {
+            this.menuVisible = false;
+            this.gameStarted = false;
+            this.mapEditorVisible = true;
+            this.levelSelected = false;
+            this.selectedLevel = null;
+            // Загружаем сохранённые данные по локациям из localStorage
+            const savedLayout = localStorage.getItem('mapLayout');
+            this.mapLayout = savedLayout ? JSON.parse(savedLayout) : {};
+            this.currentMapEntities = [];
+          } else {
+            alert('Неверный код');
+          }
+        },
+        selectLevel(n) {
+          this.selectedLevel = n;
+          this.levelSelected = true;
+          // При выборе локации грузим объекты этой локации
+          this.currentMapEntities = this.mapLayout[n] ? this.mapLayout[n] : [];
+        },
+        selectEntity(entity) {
+          // Инициализируем перетаскивание сущности с начальными параметрами (scale = 1)
+          this.selectedEntity = entity;
+          this.draggingEntity = { type: entity, x: 0, y: 0, scale: 1 };
+        },
+        handleMapMouseMove(event) {
+          if (this.selectedEntity && this.draggingEntity) {
+            this.draggingEntity.x = event.clientX - 20;
+            this.draggingEntity.y = event.clientY - 20;
+          }
+        },
+        handleWheel(event) {
+          // Изменяем масштаб перетаскиваемой сущности по колёсикам мыши
+          if (this.draggingEntity) {
+            const delta = event.deltaY < 0 ? 0.1 : -0.1;
+            this.draggingEntity.scale = Math.max(0.5, this.draggingEntity.scale + delta);
+          }
+        },
+        handleMapMouseDown(event) {
+          if (this.selectedEntity && this.draggingEntity) {
+            if (event.button === 0) { // ЛКМ – размещаем объект
+              let newObj = { ...this.draggingEntity, id: this.entityIdCounter++, info: {} };
+              // Генерируем базовую информацию об объекте
+              if(newObj.type === 'house') { newObj.info = { name: 'дом' + newObj.id, type: 'дом' }; }
+              else if(newObj.type === 'enemy') { newObj.info = { name: 'враг' + newObj.id, type: 'противник' }; }
+              else if(newObj.type === 'cave') { newObj.info = { name: 'пещера' + newObj.id, type: 'переход' }; }
+              else { newObj.info = { name: newObj.type + newObj.id, type: 'препятствие' }; }
+              // Для новых сущностей можно добавить случайные вариации (цвет, угол и т.п.)
+              if(newObj.type === 'stone'){
+                newObj.color = ['#888', '#aaa', '#666'][Math.floor(Math.random()*3)];
+                newObj.angle = [0, 15, -15][Math.floor(Math.random()*3)];
+              }
+              if(newObj.type === 'tree'){
+                newObj.trunkColor = ['#8b4513', '#A0522D', '#CD853F'][Math.floor(Math.random()*3)];
+                newObj.leavesColor = ['#228B22', '#32CD32', '#006400'][Math.floor(Math.random()*3)];
+              }
+              if(newObj.type === 'campfire'){
+                newObj.flameColor = ['orange', 'red', 'yellow'][Math.floor(Math.random()*3)];
+              }
+              // Добавляем объект в текущую локацию
+              this.currentMapEntities.push(newObj);
+              // Сохраняем данные в mapLayout
+              this.mapLayout[this.selectedLevel] = this.currentMapEntities;
+              localStorage.setItem('mapLayout', JSON.stringify(this.mapLayout));
+              // Сбрасываем режим перетаскивания
+              this.selectedEntity = null;
+              this.draggingEntity = null;
+            }
+          }
+        },
+        cancelDragging() {
+          this.selectedEntity = null;
+          this.draggingEntity = null;
+        },
+        exitMapEditor() {
+          // Сохраняем текущую локацию перед выходом
+          if(this.selectedLevel) {
+            this.mapLayout[this.selectedLevel] = this.currentMapEntities;
+            localStorage.setItem('mapLayout', JSON.stringify(this.mapLayout));
+          }
+          this.mapEditorVisible = false;
+          this.gameStarted = true;
+          document.body.classList.add('game-background');
+        },
+        // Отображение информации об объекте при клике на размещённый объект
+        showObjectInfo(ent) {
+          this.currentObject = {
+            id: ent.info.name,
+            typeText: ent.info.type
+          };
+          this.infoWindowVisible = true;
+          this.$nextTick(() => { document.querySelector('.info-window').focus(); });
+        },
+        closeInfoWindow() {
+          this.closingInfoWindow = true;
+          setTimeout(() => { this.infoWindowVisible = false; this.closingInfoWindow = false; }, 500);
+        },
+        // Определение компонента для сущности
+        getEntityComponent(ent) {
+          return entityComponents[ent.type] || 'div';
+        }
+      },
+      mounted() {
+        this.loadCharacterData();
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            if (this.mapEditorVisible) { this.exitMapEditor(); }
+            else if (this.gameStarted) { this.showMenu(); }
+            else if (this.infoWindowVisible) { this.closeInfoWindow(); }
+          }
+          this.keysPressed[e.key.toLowerCase()] = true;
+        });
+        document.addEventListener('keyup', (e) => {
+          this.keysPressed[e.key.toLowerCase()] = false;
+        });
+        setInterval(() => {
+          if (this.characterCreated && this.gameStarted && !this.mapEditorVisible) {
+            this.updatePosition();
+          }
+        }, 16);
+      }
+    });
+
+    // Регистрируем компоненты для сущностей
+    for (const key in entityComponents) {
+      app.component(key, entityComponents[key]);
+    }
+
+    app.mount('#app');
+  </script>
+</body>
+</html>
